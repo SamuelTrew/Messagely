@@ -4,6 +4,8 @@ import re
 from collections import OrderedDict
 import numpy as np
 import matplotlib.pyplot as plt
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+from PIL import Image
 
 
 def main():
@@ -76,6 +78,7 @@ def main():
 
    plot_me(keys, values)
    plot_them(keys, values)
+   gen_wordcloud(total, exclusions)
 
 
 def plot_me(keys: list, values: list):
@@ -103,6 +106,21 @@ def plot_them(keys: list, values: list):
    ax.set_xlabel("Frequency")
 
    plt.savefig("them.svg", bbox_inches="tight")
+
+
+def gen_wordcloud(total: dict, exclusions: list):
+   cloud_dict: dict = OrderedDict()
+   for (k, v) in total.items():
+      if v > 100 and k not in exclusions:
+         cloud_dict[k] = v
+
+   mask: np.array = np.array(Image.open("mask.png"))
+
+   wordcloud = WordCloud(width=1000, height=500, relative_scaling=1, mask=mask).generate_from_frequencies(cloud_dict)
+
+   plt.imshow(wordcloud, interpolation='bilinear')
+   plt.axis("off")
+   wordcloud.to_file("wordcloud.png")
 
 
 if __name__ == "__main__":
