@@ -104,7 +104,8 @@ venv.bak/
 .mypy_cache/
 
 # images
-*.png
+wordcloud.png
+start.png
 *.svg
 
 # message file

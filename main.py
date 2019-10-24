@@ -5,7 +5,9 @@ from collections import OrderedDict
 import numpy as np
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
-from PIL import Image
+from PIL import Image, ImageDraw
+from datetime import datetime
+import random
 
 
 def main():
@@ -20,17 +22,30 @@ def main():
    them: str = participants[1]["name"]
    messages: list = message_file["messages"]
 
-   total: dict = OrderedDict()
-   my_val: dict = OrderedDict()
-   their_val: dict = OrderedDict()
+   total: dict = dict()
+   my_val: dict = dict()
+   their_val: dict = dict()
+
+   total_message_count: int = 0
+   me_message_count: int = 0
+   them_message_count: int = 0
+
+   me_word_count: int = 0
+   them_word_count: int = 0
 
    for message in messages:
+      total_message_count += 1
+
+      if message["sender_name"] == me:
+         me_message_count += 1
+      else:
+         them_message_count += 1
+
       if "content" in message:
          sentence: str = message["content"]
          sentence = sentence.lower()
 
          word_list: list = re.findall("([a-zA-Z'-]+)", sentence)
-         # word_list: list = sentence.split(" ")
 
          for word in word_list:
             if word not in total:
@@ -38,21 +53,24 @@ def main():
             else:
                total[word] += 1
             if message["sender_name"] == me:
+               me_word_count += 1
                if word not in my_val:
                   my_val[word] = 1
                else:
                   my_val[word] += 1
             elif message["sender_name"] == them:
+               them_word_count += 1
                if word not in their_val:
                   their_val[word] = 1
                else:
                   their_val[word] += 1
 
-   # print(total.__str__())
-
    ###########################################################
    ############# Plotting ####################################
    ###########################################################
+
+   messages_per_person(me_message_count, them_message_count)
+   words_per_person(me_word_count, them_word_count)
 
    # Exclusion list of basic words
    exclusions: list = ["the", "to", "so", "do", "can", "are", "of", "on", "is", "that", "on", "is", "just", "in",
@@ -73,41 +91,55 @@ def main():
    fig_size[0] = 15
    fig_size[1] = 10
    plt.rcParams["figure.figsize"] = fig_size
-   plt.rcParams["axes.facecolor"] = "black"
+   # plt.rcParams["axes.facecolor"] = "black"
    #####################
 
-   plot_me(keys, values)
-   plot_them(keys, values)
+   plot_bar_me(keys, values)
+   plot_bar_them(keys, values)
    gen_wordcloud(total, exclusions)
+   gen_start(messages[-1]["timestamp_ms"])
 
 
-def plot_me(keys: list, values: list):
-   fig, ax = plt.subplots()
+# Produces your bar graph of your frequency for most used words
+def plot_bar_me(keys: list, values: list):
+   fig, ax = plt.subplots(facecolor="black")
    y_pos: list = np.arange(len(keys))
 
-   ax.barh(y_pos, values, align="center")
+   ax.barh(y_pos, values, align="center", color="blue")
    ax.set_yticks(y_pos)
    ax.set_yticklabels("")
    ax.invert_yaxis()
    ax.set_xlabel("Frequency")
+   ax.set_clip_on(False)
+   ax.spines['bottom'].set_color("white")
+   ax.xaxis.label.set_color("white")
+   ax.tick_params(axis='x', colors="white")
 
-   plt.savefig("me.svg", bbox_inches="tight")
+   plt.savefig("me.svg", bbox_inches="tight", facecolor=fig.get_facecolor(), transparent=True)
 
 
-def plot_them(keys: list, values: list):
-   fig, ax = plt.subplots()
+# Produces their bar graph of their frequency for most used words
+def plot_bar_them(keys: list, values: list):
+   fig, ax = plt.subplots(facecolor="black")
    y_pos: list = np.arange(len(keys))
 
-   ax.barh(y_pos, values, align="center")
+   ax.barh(y_pos, values, align="center", color="deeppink")
    ax.set_yticks(y_pos)
    ax.set_yticklabels(keys)
    ax.invert_yaxis()
    ax.invert_xaxis()
    ax.set_xlabel("Frequency")
+   ax.set_clip_on(False)
+   ax.spines['bottom'].set_color("white")
+   ax.spines['left'].set_color("white")
+   ax.xaxis.label.set_color("white")
+   ax.tick_params(axis='x', colors="white")
+   ax.tick_params(axis='y', colors="white")
 
-   plt.savefig("them.svg", bbox_inches="tight")
+   plt.savefig("them.svg", bbox_inches="tight", facecolor=fig.get_facecolor(), transparent=True)
 
 
+# Generate the wordcloud image from the input data
 def gen_wordcloud(total: dict, exclusions: list):
    cloud_dict: dict = OrderedDict()
    for (k, v) in total.items():
@@ -117,10 +149,61 @@ def gen_wordcloud(total: dict, exclusions: list):
    mask: np.array = np.array(Image.open("mask.png"))
 
    wordcloud = WordCloud(width=1000, height=500, relative_scaling=1, mask=mask).generate_from_frequencies(cloud_dict)
+   wordcloud.recolor(color_func=recolour, random_state=3)
 
    plt.imshow(wordcloud, interpolation='bilinear')
    plt.axis("off")
    wordcloud.to_file("wordcloud.png")
+
+
+# Recolour function to change the wordcloud text colours
+# I chose the RGB values between the values of two colours
+def recolour(word, font_size, position, orientation, random_state=None, **kwargs):
+   red: int = random.randint(0, 255)
+   green: int = random.randint(0, 20)
+   blue: int = random.randint(147, 255)
+   return "rgb({0}, {1}, {2})".format(red, green, blue)
+
+
+# Used as a helper function to calculate the pie chart
+def func(pct, allvals):
+   absolute = int(pct / 100. * np.sum(allvals))
+   return "{:.1f}%\n({:d})".format(pct, absolute)
+
+
+# Produces an image that shows the pie ratio for number of messages sent per person
+def messages_per_person(me: int, them: int):
+   fig, ax = plt.subplots(figsize=(3, 3), subplot_kw=dict(aspect="equal"), facecolor="black")
+
+   wedges, _, autotexts = ax.pie([me, them], autopct=lambda pct: func(pct, [me, them]), textprops=dict(color="w"), colors=["blue", "deeppink"])
+   plt.setp(autotexts, size=8, weight="bold")
+   ax.set_title("Messages per Person", color="white")
+   ax.set_clip_on(False)
+
+   plt.savefig("messages.svg", facecolor=fig.get_facecolor())
+
+
+# Produces an image that shows the pie ratio for number of words sent per person
+def words_per_person(me: int, them: int):
+   fig, ax = plt.subplots(figsize=(3, 3), subplot_kw=dict(aspect="equal"), facecolor="black")
+
+   wedges, _, autotexts = ax.pie([me, them], autopct=lambda pct: func(pct, [me, them]), textprops=dict(color="w"), colors=["blue", "deeppink"])
+   plt.setp(autotexts, size=8, weight="bold")
+   ax.set_title("Words per Person", color="white")
+   ax.set_clip_on(False)
+
+   plt.savefig("words.svg", facecolor=fig.get_facecolor())
+
+
+# Produces an image that is the first day you started messaging the person
+def gen_start(timestamp: int):
+   timestamp = int("{}".format(timestamp)[:-3])
+   date: str = datetime.utcfromtimestamp(timestamp).strftime("%d-%m-%Y")
+
+   img = Image.new('RGB', (100, 40), (0, 0, 0))
+   d = ImageDraw.Draw(img)
+   d.text((20, 15), date, fill="purple")
+   img.save("start.png")
 
 
 if __name__ == "__main__":
