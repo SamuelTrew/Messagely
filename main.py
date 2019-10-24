@@ -18,13 +18,13 @@ def main():
       message_file = json.load(json_file)
 
    participants: list = message_file["participants"]
-   me: str = participants[0]["name"]
-   them: str = participants[1]["name"]
+   me: str = participants[1]["name"]
+   them: str = participants[0]["name"]
    messages: list = message_file["messages"]
 
-   total: dict = dict()
-   my_val: dict = dict()
-   their_val: dict = dict()
+   total: dict = OrderedDict()
+   my_val: dict = OrderedDict()
+   their_val: dict = OrderedDict()
 
    total_message_count: int = 0
    me_message_count: int = 0
@@ -91,11 +91,23 @@ def main():
    fig_size[0] = 15
    fig_size[1] = 10
    plt.rcParams["figure.figsize"] = fig_size
-   # plt.rcParams["axes.facecolor"] = "black"
    #####################
 
-   plot_bar_me(keys, values)
-   plot_bar_them(keys, values)
+   my_values: list = []
+   their_values: list = []
+   for key in keys:
+      if key in my_val:
+         my_values.append(my_val[key])
+      else:
+         my_values.append(0)
+
+      if key in their_val:
+         their_values.append(their_val[key])
+      else:
+         their_values.append(0)
+
+   plot_bar_me(keys, my_values)
+   plot_bar_them(keys, their_values)
    gen_wordcloud(total, exclusions)
    gen_start(messages[-1]["timestamp_ms"])
 
