@@ -107,6 +107,11 @@ venv.bak/
 wordcloud.png
 start.png
 *.svg
+!folder/
+folder/*
 
 # message file
 *.json
+*.txt
+
+.idea/

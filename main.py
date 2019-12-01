@@ -1,69 +1,36 @@
 import sys
-import json
-import re
-from collections import OrderedDict
 import numpy as np
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 from PIL import Image, ImageDraw
 from datetime import datetime
 import random
+from collections import OrderedDict
 
+from parser import Parser
+
+their_name: str = ""
 
 def main():
-   name: str = sys.argv[1]  # name of JSON file
+   global their_name
+   parser = Parser()
+   name: str = sys.argv[2]       # name of JSON file
+   platform: str = sys.argv[1]   # platform of messages
 
-   message_file: dict
-   with open(name) as json_file:
-      message_file = json.load(json_file)
+   if platform == "messenger":
+      parser.parse_messenger(name)
+   elif platform == "whatsapp":
+      parser.parse_whatsapp(name)
 
-   participants: list = message_file["participants"]
-   me: str = participants[1]["name"]
-   them: str = participants[0]["name"]
-   messages: list = message_file["messages"]
-
-   total: dict = OrderedDict()
-   my_val: dict = OrderedDict()
-   their_val: dict = OrderedDict()
-
-   total_message_count: int = 0
-   me_message_count: int = 0
-   them_message_count: int = 0
-
-   me_word_count: int = 0
-   them_word_count: int = 0
-
-   for message in messages:
-      total_message_count += 1
-
-      if message["sender_name"] == me:
-         me_message_count += 1
-      else:
-         them_message_count += 1
-
-      if "content" in message:
-         sentence: str = message["content"]
-         sentence = sentence.lower()
-
-         word_list: list = re.findall("([a-zA-Z'-]+)", sentence)
-
-         for word in word_list:
-            if word not in total:
-               total[word] = 1
-            else:
-               total[word] += 1
-            if message["sender_name"] == me:
-               me_word_count += 1
-               if word not in my_val:
-                  my_val[word] = 1
-               else:
-                  my_val[word] += 1
-            elif message["sender_name"] == them:
-               them_word_count += 1
-               if word not in their_val:
-                  their_val[word] = 1
-               else:
-                  their_val[word] += 1
+   me_message_count: int = parser.me_message_count
+   them_message_count: int = parser.them_message_count
+   me_word_count: int = parser.me_word_count
+   them_word_count: int = parser.them_word_count
+   my_val: dict = parser.my_val
+   their_val: dict = parser.their_val
+   total: dict = parser.total
+   messages: list = parser.messages
+   their_name = parser.their_name
 
    ###########################################################
    ############# Plotting ####################################
@@ -74,8 +41,8 @@ def main():
 
    # Exclusion list of basic words
    exclusions: list = ["the", "to", "so", "do", "can", "are", "of", "on", "is", "that", "on", "is", "just", "in",
-                       "it",
-                       "a", "it's", "and", "at", "for", "was", "but", "be", "as", "too", "this", "or", "did", "with", "its"]
+                       "it", "a", "it's", "and", "at", "for", "was", "but", "be", "as", "too", "this", "or", "did",
+                       "with", "its", "i", "you", "u", "have", "if", "me", "he", "her", "your", "not"]
 
    # Lists of all the keys within a certain range from the keys and values from the dict
    keys: list = [key for (key, value) in total.items() if value > 1000 and key not in exclusions]
@@ -106,10 +73,12 @@ def main():
       else:
          their_values.append(0)
 
-   plot_bar_me(keys, my_values)
-   plot_bar_them(keys, their_values)
+   if platform == "messenger":
+      plot_bar_me(keys, my_values)
+      plot_bar_them(keys, their_values)
+      gen_start(messages[-1]["timestamp_ms"])
+
    gen_wordcloud(total, exclusions)
-   gen_start(messages[-1]["timestamp_ms"])
 
 
 # Produces your bar graph of your frequency for most used words
@@ -127,7 +96,7 @@ def plot_bar_me(keys: list, values: list):
    ax.xaxis.label.set_color("white")
    ax.tick_params(axis='x', colors="white")
 
-   plt.savefig("me.svg", bbox_inches="tight", facecolor=fig.get_facecolor(), transparent=True)
+   plt.savefig("{}/me.svg".format(their_name), bbox_inches="tight", facecolor=fig.get_facecolor(), transparent=True)
 
 
 # Produces their bar graph of their frequency for most used words
@@ -148,32 +117,40 @@ def plot_bar_them(keys: list, values: list):
    ax.tick_params(axis='x', colors="white")
    ax.tick_params(axis='y', colors="white")
 
-   plt.savefig("them.svg", bbox_inches="tight", facecolor=fig.get_facecolor(), transparent=True)
+   plt.savefig("{}/them.svg".format(their_name), bbox_inches="tight", facecolor=fig.get_facecolor(), transparent=True)
 
 
 # Generate the wordcloud image from the input data
 def gen_wordcloud(total: dict, exclusions: list):
    cloud_dict: dict = OrderedDict()
    for (k, v) in total.items():
-      if v > 100 and k not in exclusions:
+      # if v > 100 and k not in exclusions:
+      if v > 1 and k not in exclusions:
          cloud_dict[k] = v
 
-   mask: np.array = np.array(Image.open("mask.png"))
+   mask: np.array = np.array(Image.open("mother.png"))
+   # mask: np.array = np.array(Image.open("mask.png"))
 
-   wordcloud = WordCloud(width=1000, height=500, relative_scaling=1, mask=mask).generate_from_frequencies(cloud_dict)
+   # wordcloud = WordCloud(width=1000, height=500, relative_scaling=1, mask=mask).generate_from_frequencies(cloud_dict)
+   wordcloud = WordCloud(width=2000, height=2000, relative_scaling=1, mask=mask, background_color="white").generate_from_frequencies(cloud_dict)
    wordcloud.recolor(color_func=recolour, random_state=3)
 
    plt.imshow(wordcloud, interpolation='bilinear')
    plt.axis("off")
-   wordcloud.to_file("wordcloud.png")
+   wordcloud.to_file("{}/wordcloud.png".format(their_name))
 
 
 # Recolour function to change the wordcloud text colours
 # I chose the RGB values between the values of two colours
 def recolour(word, font_size, position, orientation, random_state=None, **kwargs):
-   red: int = random.randint(0, 255)
-   green: int = random.randint(0, 20)
-   blue: int = random.randint(147, 255)
+   # red: int = random.randint(0, 255)
+   # green: int = random.randint(0, 20)
+   # blue: int = random.randint(147, 255)
+
+   red: int = random.randint(0, 32)
+   green: int = random.randint(100, 178)
+   blue: int = random.randint(0, 170)
+
    return "rgb({0}, {1}, {2})".format(red, green, blue)
 
 
@@ -192,7 +169,7 @@ def messages_per_person(me: int, them: int):
    ax.set_title("Messages per Person", color="white")
    ax.set_clip_on(False)
 
-   plt.savefig("messages.svg", facecolor=fig.get_facecolor())
+   plt.savefig("{}/messages.svg".format(their_name), facecolor=fig.get_facecolor())
 
 
 # Produces an image that shows the pie ratio for number of words sent per person
@@ -204,7 +181,7 @@ def words_per_person(me: int, them: int):
    ax.set_title("Words per Person", color="white")
    ax.set_clip_on(False)
 
-   plt.savefig("words.svg", facecolor=fig.get_facecolor())
+   plt.savefig("{}/words.svg".format(their_name), facecolor=fig.get_facecolor())
 
 
 # Produces an image that is the first day you started messaging the person
@@ -215,7 +192,7 @@ def gen_start(timestamp: int):
    img = Image.new('RGB', (100, 40), (0, 0, 0))
    d = ImageDraw.Draw(img)
    d.text((20, 15), date, fill="purple")
-   img.save("start.png")
+   img.save("{}/start.png".format(their_name))
 
 
 if __name__ == "__main__":
